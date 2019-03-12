@@ -62,11 +62,13 @@ for build_order in list(build_orders.values())[:n]:
 
 str_build_orders = []
 mmrs = []
+player_ids = []
 for player_id, build_order in list(build_orders.items())[:n]:
     mmr = players[player_id]['player_mmr']
     if len(build_order) < l or mmr < 0:
         continue
     mmrs.append(mmr)
+    player_ids.append(player_id)
     str_build_order = ""
     l_b = min(l, len(build_order))
     sorted_build_order = {int(k): v for k, v in build_order.items()}
@@ -93,8 +95,9 @@ for player_id, build_order in build_orders.items():
     i += 1
 '''
 
-pickle.dump(str_build_orders, open("data/distance_matrix/TvZ_build_orders_{}_{}.p".format(n, l), "wb"))
+pickle.dump(str_build_orders, open("data/build_orders/TvZ_build_orders_{}_{}.p".format(n, l), "wb"))
 pickle.dump(mmrs, open("data/mmr/TvZ_mmr_{}.p".format(n), "wb"))
+pickle.dump(player_ids, open("data/player_ids/TvZ_player_ids_{}.p".format(n), "wb"))
 
 i = 0
 for y in range(n):

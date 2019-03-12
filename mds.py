@@ -13,11 +13,53 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import json
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from features import FeatureGrid, FeatureDim
+
 
 #D = np.ones((10000, 10000))
-n = 2881
-l = 14
+n = 7683
+l = 16
 cache = True
+
+
+def make_grid(features, mmrs, k):
+    mmr_grid = np.zeros((k, k))
+    count_grid = np.zeros((k, k))
+    step_size = 1 / k
+    for a in range(k):
+        a_min = step_size * a
+        a_max = a_min + step_size
+        for b in range(k):
+            b_min = step_size * b
+            b_max = b_min + step_size
+            val = []
+            for i in range(len(features)):
+                feature = features[i]
+                mmr = mmrs[i]
+                if a_min <= feature[0] <= a_max and b_min <= feature[1] <= b_max:
+                    # count_grid[k - a - 1][b] += 1
+                    count_grid[k - b - 1][a] += 1
+                    # count_grid[b][a] += 1
+                    val.append(mmr)
+            # mmr_grid[k - a - 1][b] = np.mean(val)
+            mmr_grid[k - b - 1][a] = np.mean(val)
+            #mmr_grid[b][a] = np.mean(val)
+    return mmr_grid, count_grid
+
+
+def normalize_feature(feature, features):
+    if type(feature) is np.ndarray:
+        norm_features = []
+        for i in range(len(feature)):
+            min_feature = np.min(features[:,i])
+            max_feature = np.max(features[:,i])
+            norm_feature = (feature[i] - min_feature) / (max_feature - min_feature)
+            norm_features.append(norm_feature)
+        return norm_features
+    min_feature = np.min(features)
+    max_feature = np.max(features)
+    norm_feature = (feature - min_feature) / (max_feature - min_feature)
+    return norm_feature
 
 
 def readable_build_order(str_build_order):
@@ -31,6 +73,29 @@ def closest_point(point, points):
     points = np.asarray(points)
     dist_2 = np.sum((points - point)**2, axis=1)
     return points[np.argmin(dist_2)]
+
+
+def plot_grid(grid, count=False):
+    # plt.style.use('ggplot')
+
+    # brewer2mpl.get_map args: set name  set type  number of colors
+    # bmap = brewer2mpl.get_map('Set2', 'qualitative', 7)
+
+    # cmap = 'plasma'
+    # cmap = 'inferno'
+    # cmap = 'magma'
+    # cmap = 'viridis'
+
+    plt.clf()
+    ax = sns.heatmap(grid, linewidth=0.5, vmin=np.nanmin(grid), vmax=np.nanmax(grid))
+    fig = ax.get_figure()
+
+    #ax.axes.set_xlabel(grid.feature_b, fontsize=14)
+    #ax.axes.set_ylabel(grid.feature_a.title, fontsize=14)
+    ax.axes.set_xticklabels(["" for i in np.arange(0, 1, 1/len(grid))])
+    ax.axes.set_yticklabels(["" for i in reversed(np.arange(0, 1, 1/len(grid)))])
+    fig.show()
+    fig.savefig('plots/feature_maps/feature_map_{}_{}'.format(("_count" if count else ""), len(grid)) + '.pdf')
 
 
 def plot_pca(data, build_orders, pca=False, eps=0.3, min_samples=10, min_clusters=1):
@@ -168,7 +233,8 @@ def plot_histogram(data, build_orders, mmrs, num_bins=30):
     # plt.tight_layout()
     n, bins, patches = plt.hist(data, num_bins, density=False, alpha=0.75)
     norm = mpl.colors.Normalize(vmin=2000, vmax=5000)
-    cmap = 'viridis'
+    #cmap = 'viridis'
+    bars = []
     for i in range(len(patches)):
         patch = patches[i]
         ran = [patch.xy[0] - patch._width/2, patch.xy[0] + patch._width/2]
@@ -183,6 +249,11 @@ def plot_histogram(data, build_orders, mmrs, num_bins=30):
         print("Patch {} [{} - {}]:".format(i, ran[0], ran[1]))
         for bo in build_orders_in_patch:
             print(readable_build_order(bo))
+        bars.append({
+            'mean_mmr': mean_mmr,
+            'build_orders': build_orders_in_patch,
+            'range': ran
+        })
     #cbax = fig.add_axes([0.85, 0.11, .04, .78])
     divider = make_axes_locatable(plt.gca())
     cax = divider.append_axes("right", "5%", pad="3%")
@@ -192,19 +263,20 @@ def plot_histogram(data, build_orders, mmrs, num_bins=30):
     cb1.set_label('MMR')
     #plt.grid(True)
 
-    plt.savefig('plots/mds_1d.pdf')
+    plt.savefig('plots/mds_1d_{}.pdf'.format(num_bins))
     plt.clf()
+    return bars
 
 
-build_orders = pickle.load(open('data/distance_matrix/TvZ_build_orders_{}_{}.p'.format(n, l), 'rb'))
+build_orders = pickle.load(open('data/build_orders/TvZ_build_orders_{}_{}.p'.format(n, l), 'rb'))
 mmrs = pickle.load(open('data/mmr/TvZ_mmr_{}.p'.format(n), 'rb'))
-player_ids = pickle.load(open('data/player_ids/TvZ_playerid_{}.p'.format(n), 'rb'))
+player_ids = pickle.load(open('data/player_ids/TvZ_player_ids_{}.p'.format(n), 'rb'))
 
-dims = [1, 2]
+dims = [2]
 for dim in dims:
-    if not (cache and os.path.isfile('data/transformations/trans{}_{}_{}.p'.format(dims, n, l))):
+    if not (cache and os.path.isfile('data/transformations/trans_{}_{}_{}.p'.format(dim, n, l))):
         D = pickle.load(open('data/distance_matrix/TvZ_{}_{}.p'.format(n, l), 'rb'))
-        embedding = MDS(n_components=dims, dissimilarity='precomputed')
+        embedding = MDS(n_components=dim, dissimilarity='precomputed')
         transformed = embedding.fit_transform(D)
         out = {
             'embedding': embedding,
@@ -214,7 +286,7 @@ for dim in dims:
             'mmrs': mmrs
         }
         print(transformed.shape)
-        pickle.dump(out, open('data/transformations/trans_{}_{}_{}.p'.format(dims, n, l), 'wb'))
+        pickle.dump(out, open('data/transformations/trans_{}_{}_{}.p'.format(dim, n, l), 'wb'))
 
     # Load cost table
     print('Parsing cost table')
@@ -224,10 +296,30 @@ for dim in dims:
         costs = json.loads(s)
     builds = [build for build in costs.keys()]
 
-    transformed = pickle.load(open('data/transformations/trans_{}_{}_{}.p'.format(dim, n, l), 'rb'))
+    transformed = pickle.load(open(f'data/transformations/trans_{dim}_{n}_{l}.p', 'rb'))
+
+    # Save (player_id, transformation) paris
+    transform_dict = {}
+    normalized_features = []
+    for player_id, transformation in zip(transformed['player_ids'], transformed['transformed']):
+        normalized_feature = normalize_feature(transformation, transformed['transformed'])
+        normalized_features.append(normalized_feature)
+        transform_dict[player_id] = normalized_feature
+    with open("data/features/features_{}D.json".format(dim), "w") as file:
+        json.dump(transform_dict, file)
+
     if dim == 2:
+
         plot_pca_mmr(transformed['transformed'], transformed['build_orders'], transformed['mmrs'])
-        plot_pca(transformed['transformed'], transformed['build_orders'], transformed['mmrs'], eps=120, min_samples=25)
+        plot_pca(transformed['transformed'], transformed['build_orders'], transformed['mmrs'], eps=80, min_samples=25)
+
+        # Feature heat map
+        for k in [40, 200]:
+            mmr_grid, count_grid = make_grid(normalized_features, mmrs=mmrs, k=k)
+            plot_grid(mmr_grid, count=False)
+            plot_grid(count_grid, count=True)
+
     elif dim == 1:
         for bins in [10, 25, 50, 100]:
-            plot_histogram(transformed['transformed'], transformed['build_orders'], transformed['mmrs'], num_bins=bins)
+            bars = plot_histogram(transformed['transformed'], transformed['build_orders'], transformed['mmrs'], num_bins=bins)
+            pickle.dump(bars, open('data/transformations/bars_{}_{}_{}.p'.format(dim, n, l), 'wb'))
